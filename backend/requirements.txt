@@ -3,3 +3,10 @@ uvicorn[standard]
 sqlalchemy
 psycopg2-binary
 pydantic-settings
+python-multipart
+google-genai
+jinja2
+# PDF rendering. WeasyPrint needs the GTK/Pango native stack, which does not
+# ship on Windows — Chromium's print-to-PDF needs no system libraries.
+# After installing, run once: python -m playwright install chromium
+playwright

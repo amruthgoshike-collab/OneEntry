@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
-from app.routers import entities, jobs
+from app.routers import documents, entities, jobs, quotations
 
 app = FastAPI(title="OneEntry API")
 
@@ -39,3 +39,5 @@ def health():
 
 app.include_router(entities.router, prefix="/api")
 app.include_router(jobs.router, prefix="/api")
+app.include_router(documents.router, prefix="/api")
+app.include_router(quotations.router, prefix="/api")

@@ -12,7 +12,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, computed_field
 
 
 def _decimal_str(v: Decimal | None) -> str | None:
@@ -66,13 +66,19 @@ class LineItem(BaseModel):
     id: uuid.UUID
     position: int
     description: str
+    hsn_sac: str | None
     quantity: Money
     unit: str | None
     rate: Money
+    tax_rate: Money
     amount: Money
 
 
 # --- artifacts that hang off a job -------------------------------------------
+
+class QuotationCreate(BaseModel):
+    notes: str | None = None
+
 
 class Quotation(BaseModel):
     model_config = ORM
@@ -86,9 +92,15 @@ class Quotation(BaseModel):
     gst_rate: Money
     gst_amount: Money
     total: Money
-    pdf_url: str | None = Field(default=None, validation_alias="pdf_path")
     created_at: datetime
     line_items: list[LineItem] = []
+    # Filesystem path stays server-side; the API exposes a fetchable URL.
+    pdf_path: str | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def pdf_url(self) -> str | None:
+        return f"/api/quotations/{self.id}/pdf" if self.pdf_path else None
 
 
 class Invoice(BaseModel):
@@ -104,9 +116,14 @@ class Invoice(BaseModel):
     gst_amount: Money
     total: Money
     due_date: date | None
-    pdf_url: str | None = Field(default=None, validation_alias="pdf_path")
     created_at: datetime
     line_items: list[LineItem] = []
+    pdf_path: str | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def pdf_url(self) -> str | None:
+        return f"/api/invoices/{self.id}/pdf" if self.pdf_path else None
 
 
 class Certificate(BaseModel):
@@ -117,8 +134,13 @@ class Certificate(BaseModel):
     certificate_number: str
     scope_summary: str | None
     issued_on: date | None
-    pdf_url: str | None = Field(default=None, validation_alias="pdf_path")
     created_at: datetime
+    pdf_path: str | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def pdf_url(self) -> str | None:
+        return f"/api/certificates/{self.id}/pdf" if self.pdf_path else None
 
 
 class Document(BaseModel):
@@ -134,8 +156,13 @@ class Document(BaseModel):
     document_date: date | None
     due_date: date | None
     expense_category: str | None
+    summary: str | None
     extracted_json: dict | None
     created_at: datetime
+
+
+class DocumentList(BaseModel):
+    items: list[Document]
 
 
 class JobEvent(BaseModel):

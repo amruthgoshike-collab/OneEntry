@@ -148,9 +148,13 @@ class LineItem(Base):
     invoice_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("invoices.id"))
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    hsn_sac: Mapped[str | None] = mapped_column(String(10))  # GST classification code
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=1)
     unit: Mapped[str | None] = mapped_column(String(20))  # sqft, nos, lumpsum...
     rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    # Per-line GST %. A quotation can mix rates (materials 18%, some services 5%),
+    # so the rate lives here; quotations.gst_rate holds the blended effective rate.
+    tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=18)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
 
     quotation: Mapped["Quotation"] = relationship(
@@ -191,6 +195,9 @@ class Document(Base):
     document_date: Mapped[date | None] = mapped_column(Date)
     due_date: Mapped[date | None] = mapped_column(Date)
     expense_category: Mapped[str | None] = mapped_column(String(100))
+    # One-line plain-English recap. This is what gets embedded into ChromaDB
+    # for fuzzy recall, so it is a column and not just a key in extracted_json.
+    summary: Mapped[str | None] = mapped_column(Text)
     extracted_json: Mapped[dict | None] = mapped_column(JsonCol)
     created_at: Mapped[datetime] = created_at_col()
 

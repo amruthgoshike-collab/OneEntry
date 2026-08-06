@@ -9,8 +9,11 @@ strings. **Every numeric DB column serializes as a string decimal**
 Dates are `YYYY-MM-DD`, timestamps ISO 8601. Absent values are `null` — fields
 are never omitted.
 
-Implemented so far: **entities, jobs**. Generation, documents and search are
-still to be built.
+Implemented so far: **entities, jobs, documents, quotation generation**.
+Approve-to-invoice, certificates and search are still to be built.
+
+`pdf_url` is an API path, not a filesystem path — `GET` it to receive
+`application/pdf`. It is `null` until the PDF has been rendered.
 
 ---
 
@@ -86,10 +89,13 @@ screen and the whole demo.**
       "detail": "JOB-0001 created for ABC Constructions",
       "created_at": "..." } ] }
 ```
-**LineItem**: `{ "id": "uuid", "position": 0, "description": "Wall putty",
-"quantity": "3000.00", "unit": "sqft", "rate": "18.00", "amount": "54000.00" }`,
-ordered by `position`. `events` is ordered oldest first.
-`404` if the job doesn't exist.
+**LineItem**: `{ "id": "uuid", "position": 0, "description": "Wall putty - 2
+coats", "hsn_sac": "995473", "quantity": "3000.00", "unit": "sqft",
+"rate": "18.00", "tax_rate": "18.00", "amount": "54000.00" }`, ordered by
+`position`. `hsn_sac` is the GST classification code printed on the PDF and may
+be `null`; `tax_rate` is that line's GST percent — lines in one document can
+carry different rates, and `quotations.gst_rate` is then the blended effective
+rate. `events` is ordered oldest first. `404` if the job doesn't exist.
 
 `PATCH /jobs/{id}` → `200` `{ "status": "completed", "completed_on": "2026-08-08" }`
 Accepts any subset of `status`, `completed_on`, `title`, `description`,
@@ -105,17 +111,36 @@ Every job state change appends to `events`, the timeline on the detail screen:
 | event_type | written when |
 |---|---|
 | `job_created` | `POST /jobs` |
-| `status_changed` | `PATCH /jobs/{id}` actually changes `status`. `detail` reads `"enquiry -> completed"` |
+| `status_changed` | the job's `status` actually changes. `detail` reads `"enquiry -> completed"` |
+| `quotation_generated` | `POST /jobs/{id}/quotation` |
 
 ---
 
 ## Generation — the money endpoints
 
 `POST /jobs/{id}/quotation` → `201`
-Body optional: `{ "notes": "include scaffolding" }`
-Backend sends the job description to Gemini, gets structured line items back,
-computes GST, persists, renders PDF. Returns `Quotation` with `line_items[]`
-and `pdf_url`. Takes 5–15s — frontend must show a loading state.
+Body optional: `{ "notes": "include scaffolding" }` — the note is passed to
+Gemini as an extra instruction and stored on the quotation.
+
+Gemini receives the job title, description, site and customer, and returns
+line items only: `description`, `hsn_sac`, `quantity`, `unit`, `rate`,
+`tax_rate`. **It never returns amounts.** Every amount, the CGST/SGST split and
+the total are computed in Python from quantity × rate, so the arithmetic on the
+PDF always adds up. Unusable line items (missing description, quantity or rate)
+are dropped rather than failing the request.
+
+Returns the full `Quotation` with `line_items[]` and `pdf_url`. Takes 5–15s —
+frontend must show a loading state. Side effects: writes a `quotation_generated`
+event, and moves the job from `enquiry` to `quoted` (with its own
+`status_changed` event).
+
+`404` if the job doesn't exist. `502` if Gemini fails or returns nothing
+usable. If the PDF render fails the quotation is still saved with its numbers
+and `pdf_url` is `null` — the figures are the valuable part.
+
+`GET /quotations/{id}/pdf` → `200 application/pdf`
+What `pdf_url` points at. `404` if the quotation doesn't exist or has no
+rendered PDF.
 
 `POST /quotations/{id}/approve` → `200`
 Sets quotation `approved`, job `approved`, **and creates the invoice by copying
@@ -132,13 +157,42 @@ its line items. Returns `Certificate` with `pdf_url`.
 
 `POST /documents` — `multipart/form-data`, field `file`, optional `job_id`
 → `202` `{ "id": "uuid", "status": "uploaded" }`
-Extraction runs in a background task.
+The file is saved under `backend/storage/YYYY/MM/` and extraction runs in a
+background task, so this returns immediately. `415` if the file is not a PDF,
+PNG, JPEG or WebP — those are what Gemini reads natively. `400` if empty,
+`404` if `job_id` is given but no such job exists.
 
 `GET /documents/{id}` → `200` — poll until `status` is `extracted` or `failed`.
-When extracted: `doc_type`, `vendor_name`, `total_amount`, `document_date`,
-`due_date`, `expense_category`, `extracted_json`.
+**Document**:
+```json
+{ "id": "uuid", "job_id": null, "filename": "sunrise-invoice.png",
+  "status": "extracted", "doc_type": "tax_invoice",
+  "vendor_name": "SUNRISE HARDWARE & PAINTS", "total_amount": "36182.00",
+  "document_date": "2026-01-14", "due_date": "2026-02-13",
+  "expense_category": "materials",
+  "summary": "Purchased paint, wall putty and rollers from Sunrise Hardware.",
+  "extracted_json": { ... },
+  "created_at": "2026-08-07T12:00:00Z" }
+```
+`status` is `uploaded` | `extracted` | `failed`. While `uploaded`, every
+extracted field is `null`. On `failed`, `extracted_json` holds
+`{ "error": "..." }` so the frontend can show why.
 
-`GET /documents` → `200` `{ "items": [Document] }`
+`doc_type` is one of `tax_invoice`, `purchase_bill`, `receipt`,
+`electricity_bill`, `delivery_challan`, `quotation`, `bank_statement`, `other`.
+`expense_category` is one of `materials`, `labour`, `transport`, `utilities`,
+`equipment_rental`, `fuel`, `professional_fees`, `permits`, `office`, `other`.
+Both fall back to `other` rather than erroring on an unexpected value.
+
+`extracted_json` is Gemini's full reply, which holds more than the columns do —
+`line_items[]`, `vendor_gstin`, `document_number`, `subtotal`, `tax_amount`,
+`notes`. Treat every key in it as optional.
+
+`summary` is a one-line recap and is the text that gets embedded into ChromaDB
+for fuzzy recall, so it is a real column rather than just a key in
+`extracted_json`.
+
+`GET /documents` → `200` `{ "items": [Document] }`, newest first.
 
 ---
 

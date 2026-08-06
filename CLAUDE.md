@@ -25,7 +25,12 @@ If a feature does not serve this loop, it does not get built.
 - Frontend: React + Vite + Tailwind.
 - LLM: Gemini, called ONLY through `backend/app/llm/client.py`.
 - Vector search: ChromaDB, local persistent client.
-- PDFs: WeasyPrint rendering Jinja2 HTML templates in `backend/app/templates/`.
+- PDFs: Jinja2 HTML templates in `backend/app/templates/`, printed to PDF by
+  Playwright's Chromium. WeasyPrint was the original choice but needs the
+  GTK/Pango native stack, which does not ship on Windows — it fails at import
+  with `cannot load library 'libgobject-2.0-0'`. Chromium needs no system
+  libraries and honours the same print CSS. Run `python -m playwright install
+  chromium` once after installing requirements.
 
 ## Hard rules
 
@@ -65,15 +70,19 @@ backend/
     db.py              engine + session
     numbering.py       JOB-0001 / QTN-0001 / INV-0001 sequences
     events.py          job timeline rows
+    extraction.py      document bytes -> normalized Document fields
+    money.py           Decimal maths, GST split, amount-in-words. ALL money
+                       arithmetic lives here — never in the LLM
     routers/           entities.py, jobs.py, documents.py, quotations.py,
                        invoices.py, certificates.py, search.py
     llm/client.py      ALL Gemini calls go here
     llm/prompts.py     prompt templates
-    pdf/render.py      HTML -> PDF
+    pdf/render.py      HTML -> PDF (Jinja2 -> Chromium)
     templates/         quotation.html, invoice.html, certificate.html
     search/router.py   structured vs semantic routing
   scripts/
     init_db.py         create tables + v_search view, re-runnable
+    migrate_*.py       one column-adding migration each, all re-runnable
   tests/
     test_extract.py    runs extraction over samples/ and prints JSON
 frontend/

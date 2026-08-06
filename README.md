@@ -63,7 +63,7 @@ Uploaded document ──► Gemini (native PDF/image) ──────┤
                                                       │
                                     ┌─────────────────┴─────────────────┐
                                     │                                   │
-                          Jinja2 → WeasyPrint              embeddings → ChromaDB
+                          Jinja2 → Chromium               embeddings → ChromaDB
                               (PDF artifacts)              (semantic recall)
 ```
 
@@ -83,7 +83,7 @@ layout as context instead of throwing it away.
 | Database | Supabase (Postgres + storage) |
 | LLM | Gemini |
 | Vector search | ChromaDB, all-MiniLM-L6-v2 |
-| PDFs | Jinja2 + WeasyPrint |
+| PDFs | Jinja2 + Playwright (Chromium print-to-PDF) |
 
 ## Running it
 
