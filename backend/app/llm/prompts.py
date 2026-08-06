@@ -2,13 +2,10 @@
 never produces layout, Jinja2 templates own all formatting."""
 
 DOC_TYPES = (
-    "tax_invoice",
-    "purchase_bill",
+    "invoice",
+    "bill",
     "receipt",
-    "electricity_bill",
-    "delivery_challan",
-    "quotation",
-    "bank_statement",
+    "certificate",
     "other",
 )
 
@@ -85,8 +82,8 @@ exactly these keys:
   "document_date": issue date as "YYYY-MM-DD", or null,
   "due_date": payment due date as "YYYY-MM-DD", or null if not stated,
   "currency": ISO code, "INR" unless clearly otherwise,
-  "subtotal": amount before tax,
-  "tax_amount": total tax (CGST + SGST + IGST combined),
+  "subtotal": the sum of all line item amounts, before GST/VAT,
+  "tax_amount": actual GST/VAT only (CGST + SGST + IGST combined), or null if none,
   "total_amount": the FINAL payable amount including all taxes and rounding,
   "expense_category": one of {list(EXPENSE_CATEGORIES)},
   "summary": one plain-English sentence, under 120 characters, naming what was bought
@@ -100,6 +97,19 @@ exactly these keys:
 }}}}
 
 Rules:
+- doc_type mapping: a tax invoice, GST invoice or sales invoice is "invoice".
+  An electricity, water, phone, internet or any other utility bill is "bill".
+  Proof that a payment was made is "receipt". A completion or work certificate
+  is "certificate". Everything else (delivery challan, quotation, bank
+  statement) is "other".
+- Every charge on the document appears EXACTLY ONCE: either as a line item or
+  inside "tax_amount" — never in both places.
+- "tax_amount" holds actual GST/VAT only. Statutory duties, cesses,
+  surcharges, fixed charges and late fees are NOT tax — they are line items.
+  On an electricity bill, energy charges, fixed charges AND electricity duty
+  are all line items; such a bill usually has no GST and tax_amount is null.
+- The arithmetic must close: line items sum to "subtotal", and "subtotal" +
+  "tax_amount" equals "total_amount" apart from a printed round-off of paise.
 - Amounts: plain decimal strings, no currency symbol and no thousands separators.
   "Rs. 1,84,500.00" becomes "184500.00". Keep two decimal places.
 - If a value is genuinely not on the document, use null. Never guess and never

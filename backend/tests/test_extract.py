@@ -32,8 +32,8 @@ def _truncate(value, width: int) -> str:
 
 
 def _print_table(rows: list[dict]) -> None:
-    headers = ("file", "doc_type", "vendor_name", "document_date", "total_amount", "expense_category")
-    caps = (26, 16, 26, 12, 12, 16)
+    headers = ("file", "doc_type", "vendor_name", "document_date", "total_amount", "expense_category", "warn")
+    caps = (26, 12, 26, 12, 12, 16, 4)
     widths = [
         min(cap, max(len(h), *(len(str(r.get(h) or "-")) for r in rows)))
         for h, cap in zip(headers, caps)
@@ -96,9 +96,16 @@ def main() -> int:
         for field in ("document_number", "vendor_gstin", "subtotal", "tax_amount", "notes"):
             if extra.get(field):
                 print(f"  {field:<18}{extra[field]}")
+        warnings = extra.get("validation_warnings") or []
+        for warning in warnings:
+            print(f"  {'!! WARNING':<18}{warning}")
         print(f"  {'elapsed':<18}{elapsed:.1f}s\n")
 
-        rows.append({"file": path.name, **{k: fields.get(k) for k in DETAIL_FIELDS}})
+        rows.append({
+            "file": path.name,
+            "warn": len(warnings),
+            **{k: fields.get(k) for k in DETAIL_FIELDS},
+        })
 
     print("=" * 78)
     print(f"SUMMARY  ({len(files) - failures}/{len(files)} extracted)\n")

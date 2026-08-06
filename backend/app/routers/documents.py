@@ -50,6 +50,14 @@ def run_extraction(document_id: uuid.UUID) -> None:
             for column, value in fields.items():
                 setattr(document, column, value)
             document.status = "extracted"
+            warnings = (fields.get("extracted_json") or {}).get("validation_warnings")
+            if warnings:
+                logger.warning(
+                    "Document %s (%s) extracted with inconsistent amounts: %s",
+                    document_id,
+                    document.filename,
+                    "; ".join(warnings),
+                )
         except Exception as exc:
             logger.exception("Extraction failed for document %s", document_id)
             document.status = "failed"

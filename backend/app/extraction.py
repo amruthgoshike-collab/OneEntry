@@ -9,9 +9,13 @@ from decimal import Decimal
 
 from app.llm.client import SUPPORTED_MIME_TYPES, generate_json
 from app.llm.prompts import DOC_TYPES, DOCUMENT_EXTRACTION_PROMPT, EXPENSE_CATEGORIES
-from app.money import parse_decimal
+from app.money import parse_decimal, q2
 
 _NULLISH = {"", "n/a", "na", "none", "null", "-", "not stated", "not available"}
+
+# GST documents legally round the grand total to the rupee, so subtotal + tax
+# can differ from the printed total by up to 50 paise without being wrong.
+ROUND_OFF_TOLERANCE = Decimal("0.50")
 
 # Indian bills are as likely to be dd/mm/yyyy as ISO.
 _DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y", "%d %b %Y", "%d %B %Y")
@@ -59,12 +63,52 @@ def _one_of(value, allowed: tuple[str, ...], default: str) -> str:
     return normalized if normalized in allowed else default
 
 
+def validate_amounts(raw: dict) -> list[str]:
+    """Check the extracted arithmetic closes; return human-readable warnings.
+
+    Two checks, run only when the fields involved are present:
+      1. line item amounts sum to `subtotal`
+      2. `subtotal` + `tax_amount` equals `total_amount`, allowing the ±0.50
+         printed round-off that GST documents carry
+    """
+    warnings = []
+
+    amounts = [
+        parse_decimal(item.get("amount")) for item in (raw.get("line_items") or [])
+    ]
+    amounts = [amount for amount in amounts if amount is not None]
+    line_sum = q2(sum(amounts, Decimal(0))) if amounts else None
+    subtotal = parse_decimal(raw.get("subtotal"))
+    tax = parse_decimal(raw.get("tax_amount"))
+    total = parse_decimal(raw.get("total_amount"))
+
+    if line_sum is not None and subtotal is not None and line_sum != subtotal:
+        warnings.append(
+            f"line items sum to {line_sum} but subtotal reads {subtotal}"
+        )
+    if subtotal is not None and total is not None:
+        expected = q2(subtotal + (tax or Decimal(0)))
+        if abs(expected - total) > ROUND_OFF_TOLERANCE:
+            warnings.append(
+                f"subtotal {subtotal} + tax {q2(tax or Decimal(0))} = {expected} "
+                f"but total_amount reads {total}"
+            )
+    return warnings
+
+
 def normalize(raw: dict) -> dict:
     """Map Gemini's JSON onto Document column values.
 
     The full model output is kept in extracted_json so nothing is lost when the
-    prompt returns more than the columns hold.
+    prompt returns more than the columns hold. When the amounts don't add up,
+    extracted_json additionally carries `validation_warnings` — inconsistent
+    numbers are stored and flagged, never silently trusted.
     """
+    extracted = dict(raw)
+    warnings = validate_amounts(raw)
+    if warnings:
+        extracted["validation_warnings"] = warnings
+
     return {
         "doc_type": _one_of(raw.get("doc_type"), DOC_TYPES, "other"),
         "vendor_name": _clean(raw.get("vendor_name")),
@@ -75,7 +119,7 @@ def normalize(raw: dict) -> dict:
             raw.get("expense_category"), EXPENSE_CATEGORIES, "other"
         ),
         "summary": _clean(raw.get("summary")),
-        "extracted_json": raw,
+        "extracted_json": extracted,
     }
 
 

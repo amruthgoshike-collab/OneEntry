@@ -166,7 +166,7 @@ PNG, JPEG or WebP — those are what Gemini reads natively. `400` if empty,
 **Document**:
 ```json
 { "id": "uuid", "job_id": null, "filename": "sunrise-invoice.png",
-  "status": "extracted", "doc_type": "tax_invoice",
+  "status": "extracted", "doc_type": "invoice",
   "vendor_name": "SUNRISE HARDWARE & PAINTS", "total_amount": "36182.00",
   "document_date": "2026-01-14", "due_date": "2026-02-13",
   "expense_category": "materials",
@@ -178,8 +178,9 @@ PNG, JPEG or WebP — those are what Gemini reads natively. `400` if empty,
 extracted field is `null`. On `failed`, `extracted_json` holds
 `{ "error": "..." }` so the frontend can show why.
 
-`doc_type` is one of `tax_invoice`, `purchase_bill`, `receipt`,
-`electricity_bill`, `delivery_challan`, `quotation`, `bank_statement`, `other`.
+`doc_type` is exactly one of `invoice`, `bill`, `receipt`, `certificate`,
+`other` — a tax/GST invoice is `invoice`, an electricity or any utility bill is
+`bill`. Anything Gemini returns outside this list is stored as `other`.
 `expense_category` is one of `materials`, `labour`, `transport`, `utilities`,
 `equipment_rental`, `fuel`, `professional_fees`, `permits`, `office`, `other`.
 Both fall back to `other` rather than erroring on an unexpected value.
@@ -187,6 +188,15 @@ Both fall back to `other` rather than erroring on an unexpected value.
 `extracted_json` is Gemini's full reply, which holds more than the columns do —
 `line_items[]`, `vendor_gstin`, `document_number`, `subtotal`, `tax_amount`,
 `notes`. Treat every key in it as optional.
+
+Amount conventions: every charge appears exactly once — as a line item or
+inside `tax_amount`, never both. `tax_amount` is actual GST/VAT only; statutory
+duties and surcharges are line items (so a no-GST utility bill has
+`tax_amount: null`). After extraction the backend checks that line items sum to
+`subtotal` and that `subtotal + tax_amount = total_amount` (± ₹0.50 printed
+round-off). On a mismatch the numbers are still stored, but `extracted_json`
+gains a `validation_warnings: ["..."]` array and a warning is logged — never
+silently trusted.
 
 `summary` is a one-line recap and is the text that gets embedded into ChromaDB
 for fuzzy recall, so it is a real column rather than just a key in
