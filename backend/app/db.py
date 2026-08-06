@@ -8,7 +8,13 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(get_settings().DATABASE_URL, pool_pre_ping=True)
+DATABASE_URL = get_settings().DATABASE_URL
+
+# SQLite only comes up when running locally without Postgres; FastAPI's
+# threadpool hands connections between threads, which it rejects by default.
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args=connect_args)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 

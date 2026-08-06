@@ -59,16 +59,21 @@ Pure vector search fails numeric filters. Do not route numbers to Chroma.
 backend/
   app/
     main.py            FastAPI app + routers
+    config.py          settings from .env
     models.py          SQLAlchemy models — SOURCE OF TRUTH for schema
     schemas.py         Pydantic request/response models
     db.py              engine + session
-    routers/           jobs.py, documents.py, quotations.py, invoices.py,
-                       certificates.py, search.py
+    numbering.py       JOB-0001 / QTN-0001 / INV-0001 sequences
+    events.py          job timeline rows
+    routers/           entities.py, jobs.py, documents.py, quotations.py,
+                       invoices.py, certificates.py, search.py
     llm/client.py      ALL Gemini calls go here
     llm/prompts.py     prompt templates
     pdf/render.py      HTML -> PDF
     templates/         quotation.html, invoice.html, certificate.html
     search/router.py   structured vs semantic routing
+  scripts/
+    init_db.py         create tables + v_search view, re-runnable
   tests/
     test_extract.py    runs extraction over samples/ and prints JSON
 frontend/

@@ -1,14 +1,21 @@
 """SQLAlchemy models — SOURCE OF TRUTH for the schema.
 
-NOTE: this file was reconstructed from api_contract.md (the scaffold commit
-claimed a schema but never committed one). Review before building routers.
+NOTE: reconstructed from api_contract.md (the scaffold commit claimed a schema
+but never committed one). Review before building further on it.
 
 `jobs` is the spine: quotations, invoices, certificates, documents, and
 events all carry job_id. Money is Numeric(12, 2), never float.
+
+Column types are dialect-portable on purpose: `Uuid` renders as native UUID on
+Postgres, and extracted_json renders as JSONB there. That costs nothing on
+Supabase and lets the app run against SQLite locally without Postgres.
 """
 import uuid
+from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     Date,
     DateTime,
     ForeignKey,
@@ -16,16 +23,25 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    Uuid,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
+JsonCol = JSON().with_variant(JSONB, "postgresql")
+
 
 def uuid_pk():
-    return mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    return mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+
+def created_at_col():
+    return mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Entity(Base):
@@ -40,9 +56,7 @@ class Entity(Base):
     phone: Mapped[str | None] = mapped_column(String(20))
     email: Mapped[str | None] = mapped_column(String(200))
     address: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[str] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = created_at_col()
 
     jobs: Mapped[list["Job"]] = relationship(back_populates="customer")
 
@@ -62,10 +76,8 @@ class Job(Base):
     site_address: Mapped[str | None] = mapped_column(Text)
     # enquiry | quoted | approved | in_progress | completed
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="enquiry")
-    completed_on: Mapped[str | None] = mapped_column(Date)
-    created_at: Mapped[str] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    completed_on: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = created_at_col()
 
     customer: Mapped["Entity"] = relationship(back_populates="jobs")
     quotations: Mapped[list["Quotation"]] = relationship(back_populates="job")
@@ -85,14 +97,12 @@ class Quotation(Base):
     quotation_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)  # QTN-0001
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")  # draft | approved
     notes: Mapped[str | None] = mapped_column(Text)
-    subtotal: Mapped[object] = mapped_column(Numeric(12, 2), nullable=False, default=0)
-    gst_rate: Mapped[object] = mapped_column(Numeric(5, 2), nullable=False, default=18)
-    gst_amount: Mapped[object] = mapped_column(Numeric(12, 2), nullable=False, default=0)
-    total: Mapped[object] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    gst_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=18)
+    gst_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
     pdf_path: Mapped[str | None] = mapped_column(String(500))
-    created_at: Mapped[str] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = created_at_col()
 
     job: Mapped["Job"] = relationship(back_populates="quotations")
     line_items: Mapped[list["LineItem"]] = relationship(
@@ -110,15 +120,13 @@ class Invoice(Base):
     quotation_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("quotations.id"))
     invoice_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)  # INV-0001
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="unpaid")  # unpaid | paid
-    subtotal: Mapped[object] = mapped_column(Numeric(12, 2), nullable=False, default=0)
-    gst_rate: Mapped[object] = mapped_column(Numeric(5, 2), nullable=False, default=18)
-    gst_amount: Mapped[object] = mapped_column(Numeric(12, 2), nullable=False, default=0)
-    total: Mapped[object] = mapped_column(Numeric(12, 2), nullable=False, default=0)
-    due_date: Mapped[str | None] = mapped_column(Date)
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    gst_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=18)
+    gst_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    due_date: Mapped[date | None] = mapped_column(Date)
     pdf_path: Mapped[str | None] = mapped_column(String(500))
-    created_at: Mapped[str] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = created_at_col()
 
     job: Mapped["Job"] = relationship(back_populates="invoices")
     quotation: Mapped["Quotation"] = relationship()
@@ -140,10 +148,10 @@ class LineItem(Base):
     invoice_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("invoices.id"))
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    quantity: Mapped[object] = mapped_column(Numeric(12, 2), nullable=False, default=1)
+    quantity: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=1)
     unit: Mapped[str | None] = mapped_column(String(20))  # sqft, nos, lumpsum...
-    rate: Mapped[object] = mapped_column(Numeric(12, 2), nullable=False, default=0)
-    amount: Mapped[object] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
 
     quotation: Mapped["Quotation"] = relationship(
         back_populates="line_items", foreign_keys=[quotation_id]
@@ -160,11 +168,9 @@ class Certificate(Base):
     job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("jobs.id"), nullable=False)
     certificate_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)  # CERT-0001
     scope_summary: Mapped[str | None] = mapped_column(Text)
-    issued_on: Mapped[str | None] = mapped_column(Date)
+    issued_on: Mapped[date | None] = mapped_column(Date)
     pdf_path: Mapped[str | None] = mapped_column(String(500))
-    created_at: Mapped[str] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = created_at_col()
 
     job: Mapped["Job"] = relationship(back_populates="certificates")
 
@@ -181,14 +187,12 @@ class Document(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="uploaded")  # uploaded | extracted | failed
     doc_type: Mapped[str | None] = mapped_column(String(50))
     vendor_name: Mapped[str | None] = mapped_column(String(200))
-    total_amount: Mapped[object] = mapped_column(Numeric(12, 2))
-    document_date: Mapped[str | None] = mapped_column(Date)
-    due_date: Mapped[str | None] = mapped_column(Date)
+    total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    document_date: Mapped[date | None] = mapped_column(Date)
+    due_date: Mapped[date | None] = mapped_column(Date)
     expense_category: Mapped[str | None] = mapped_column(String(100))
-    extracted_json: Mapped[dict | None] = mapped_column(JSONB)
-    created_at: Mapped[str] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    extracted_json: Mapped[dict | None] = mapped_column(JsonCol)
+    created_at: Mapped[datetime] = created_at_col()
 
     job: Mapped["Job"] = relationship(back_populates="documents")
 
@@ -202,9 +206,7 @@ class JobEvent(Base):
     job_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("jobs.id"), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     detail: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[str] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    created_at: Mapped[datetime] = created_at_col()
 
     job: Mapped["Job"] = relationship(back_populates="events")
 
