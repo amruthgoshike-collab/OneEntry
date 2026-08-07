@@ -172,6 +172,19 @@ approving twice would mint a second invoice for the same work.
 What the invoice's `pdf_url` points at. `404` if the invoice doesn't exist or
 has no rendered PDF.
 
+`GET /quotations` → `200` `{ "items": [QuotationSummary] }`, newest first.
+Flat list rows for the Quotations screen — no line items:
+```json
+{ "id": "uuid", "job_id": "uuid", "quotation_number": "QTN-0001",
+  "status": "approved", "total": "809556.70", "created_at": "...",
+  "job_number": "JOB-0001", "job_title": "MS railing and staircase…",
+  "customer_name": "Sai Ram Constructions", "line_item_count": 3,
+  "pdf_url": "/api/quotations/{id}/pdf" }
+```
+
+`GET /invoices` → `200` `{ "items": [InvoiceSummary] }`, newest first.
+Same shape plus `quotation_number`, `due_date`, minus `line_item_count`.
+
 `POST /jobs/{id}/certificate` → `201`
 No body. **Requires job status `completed`** — `409` otherwise, with a message
 naming the current status. Gemini writes `scope_summary` from the job title,

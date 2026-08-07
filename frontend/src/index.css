@@ -1,0 +1,78 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+/* ---------------------------------------------------------------------------
+   OneEntry design system — paper ledger look. Flat surfaces, 1px rules,
+   no shadows. Tokens live in tailwind.config.js; the hexes repeated here are
+   those same tokens (Tailwind v4 CSS can't theme() a JS config).
+   --------------------------------------------------------------------------- */
+
+body {
+  background-color: #FCFBF8; /* paper */
+  color: #1E2A2E;            /* ink */
+  font-family: "Hanken Grotesk", system-ui, sans-serif;
+}
+
+.rule-b   { border-bottom: 1px solid #E5E2DA; }
+.rule-t   { border-top: 1px solid #E5E2DA; }
+.rule-l   { border-left: 1px solid #E5E2DA; }
+.rule-r   { border-right: 1px solid #E5E2DA; }
+.rule-all { border: 1px solid #E5E2DA; }
+
+/* The coloured spine that says where a record came from. */
+.provenance-strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #DCE8F0; /* carbon */
+}
+
+/* Type scale */
+.text-headline-lg { font-size: 24px; line-height: 32px; letter-spacing: -0.01em; font-weight: 600; }
+.text-headline-md { font-size: 20px; line-height: 28px; font-weight: 600; }
+.text-label-caps  { font-size: 12px; line-height: 16px; letter-spacing: 0.05em; font-weight: 600; text-transform: uppercase; }
+.text-raw-message { font-family: "IBM Plex Sans", sans-serif; font-size: 14px; line-height: 20px; }
+.text-body-lg     { font-size: 16px; line-height: 24px; }
+.text-body-md     { font-size: 14px; line-height: 20px; }
+.text-currency-md { font-family: "IBM Plex Mono", monospace; font-size: 15px; line-height: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.text-currency-lg { font-family: "IBM Plex Mono", monospace; font-size: 22px; line-height: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Loading skeletons — same paper palette, soft shimmer. */
+@keyframes skeleton-sweep {
+  0%   { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+.skeleton {
+  border-radius: 4px;
+  background: #EFEEEB;
+  background-image: linear-gradient(90deg, #EFEEEB 0px, #FFFFFF 60px, #EFEEEB 120px);
+  background-size: 200px 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-sweep 1.2s ease-in-out infinite;
+}
+
+/* Interactive rows shift almost imperceptibly. */
+.row-hover { transition: background-color 120ms ease, transform 120ms ease; }
+.row-hover:hover { background-color: #FFFFFF; transform: translateX(2px); }
+
+/* Indeterminate progress for the 5-15s AI calls. */
+@keyframes rule-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+.working-rule {
+  position: relative;
+  overflow: hidden;
+  height: 2px;
+  background-color: #E5E2DA;
+}
+.working-rule::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 33%;
+  background-color: #2C6E68; /* action */
+  animation: rule-sweep 1.1s ease-in-out infinite;
+}

@@ -84,8 +84,11 @@ def _render_loop() -> None:
             finally:
                 _jobs.task_done()
     finally:
-        browser.close()
-        playwright.stop()
+        try:
+            browser.close()
+            playwright.stop()
+        except Exception:
+            pass  # interpreter may already be tearing down
 
 
 def warm_up() -> None:
@@ -101,9 +104,14 @@ def warm_up() -> None:
 
 @atexit.register
 def _shutdown() -> None:
-    if _worker is not None and _worker.is_alive():
-        _jobs.put(None)
-        _worker.join(timeout=5)
+    # Runs during interpreter exit — nothing here may raise, or Ctrl+C on the
+    # server prints a traceback instead of exiting quietly.
+    try:
+        if _worker is not None and _worker.is_alive():
+            _jobs.put(None)
+            _worker.join(timeout=5)
+    except Exception:
+        pass
 
 
 def html_to_pdf(html: str, output_path: Path) -> Path:

@@ -133,6 +133,61 @@ class ApproveResponse(BaseModel):
     invoice: Invoice
 
 
+class QuotationSummary(BaseModel):
+    """List row for GET /quotations — flat, no line items."""
+
+    model_config = ORM
+
+    id: uuid.UUID
+    job_id: uuid.UUID
+    quotation_number: str
+    status: str
+    total: Money
+    created_at: datetime
+    job_number: str
+    job_title: str
+    customer_name: str
+    line_item_count: int
+    pdf_path: str | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def pdf_url(self) -> str | None:
+        return f"/api/quotations/{self.id}/pdf" if self.pdf_path else None
+
+
+class QuotationList(BaseModel):
+    items: list[QuotationSummary]
+
+
+class InvoiceSummary(BaseModel):
+    """List row for GET /invoices — flat, no line items."""
+
+    model_config = ORM
+
+    id: uuid.UUID
+    job_id: uuid.UUID
+    invoice_number: str
+    quotation_number: str | None
+    status: str
+    total: Money
+    due_date: date | None
+    created_at: datetime
+    job_number: str
+    job_title: str
+    customer_name: str
+    pdf_path: str | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def pdf_url(self) -> str | None:
+        return f"/api/invoices/{self.id}/pdf" if self.pdf_path else None
+
+
+class InvoiceList(BaseModel):
+    items: list[InvoiceSummary]
+
+
 class Certificate(BaseModel):
     model_config = ORM
 

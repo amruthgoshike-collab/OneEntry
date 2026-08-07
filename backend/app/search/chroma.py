@@ -36,6 +36,16 @@ def _client():
     import chromadb
     from chromadb.config import Settings
 
+    # Chroma's telemetry stack imports opentelemetry's log SDK lazily, and
+    # when that first import happens inside an atexit hook the interpreter
+    # refuses to start its thread pool — the process dies at shutdown with
+    # "RuntimeError: can't register atexit after shutdown". Importing it now,
+    # while the interpreter is fully alive, makes the shutdown path a no-op.
+    try:
+        import opentelemetry.sdk._logs  # noqa: F401
+    except Exception:  # pragma: no cover — telemetry is optional
+        pass
+
     return chromadb.PersistentClient(
         path=str(chroma_dir()),
         settings=Settings(anonymized_telemetry=False),

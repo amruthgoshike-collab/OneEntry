@@ -57,6 +57,40 @@ def approve_quotation(quotation_id: uuid.UUID, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/invoices", response_model=schemas.InvoiceList)
+def list_invoices(db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(models.Invoice)
+        .join(models.Job, models.Job.id == models.Invoice.job_id)
+        .join(models.Entity, models.Entity.id == models.Job.customer_id)
+        .options(
+            selectinload(models.Invoice.quotation),
+            selectinload(models.Invoice.job).selectinload(models.Job.customer),
+        )
+        .order_by(models.Invoice.created_at.desc())
+    ).scalars().all()
+
+    return {
+        "items": [
+            schemas.InvoiceSummary(
+                id=inv.id,
+                job_id=inv.job_id,
+                invoice_number=inv.invoice_number,
+                quotation_number=inv.quotation.quotation_number if inv.quotation else None,
+                status=inv.status,
+                total=inv.total,
+                due_date=inv.due_date,
+                created_at=inv.created_at,
+                job_number=inv.job.job_number,
+                job_title=inv.job.title,
+                customer_name=inv.job.customer.name,
+                pdf_path=inv.pdf_path,
+            )
+            for inv in rows
+        ]
+    }
+
+
 @router.get("/invoices/{invoice_id}/pdf")
 def get_invoice_pdf(invoice_id: uuid.UUID, db: Session = Depends(get_db)):
     invoice = db.get(models.Invoice, invoice_id)

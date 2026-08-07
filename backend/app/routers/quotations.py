@@ -113,6 +113,39 @@ def create_quotation(
     ).scalar_one()
 
 
+@router.get("/quotations", response_model=schemas.QuotationList)
+def list_quotations(db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(models.Quotation)
+        .join(models.Job, models.Job.id == models.Quotation.job_id)
+        .join(models.Entity, models.Entity.id == models.Job.customer_id)
+        .options(
+            selectinload(models.Quotation.line_items),
+            selectinload(models.Quotation.job).selectinload(models.Job.customer),
+        )
+        .order_by(models.Quotation.created_at.desc())
+    ).scalars().all()
+
+    return {
+        "items": [
+            schemas.QuotationSummary(
+                id=q.id,
+                job_id=q.job_id,
+                quotation_number=q.quotation_number,
+                status=q.status,
+                total=q.total,
+                created_at=q.created_at,
+                job_number=q.job.job_number,
+                job_title=q.job.title,
+                customer_name=q.job.customer.name,
+                line_item_count=len(q.line_items),
+                pdf_path=q.pdf_path,
+            )
+            for q in rows
+        ]
+    }
+
+
 @router.get("/quotations/{quotation_id}/pdf")
 def get_quotation_pdf(quotation_id: uuid.UUID, db: Session = Depends(get_db)):
     quotation = db.get(models.Quotation, quotation_id)
