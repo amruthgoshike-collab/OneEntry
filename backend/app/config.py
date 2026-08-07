@@ -30,7 +30,15 @@ class Settings(BaseSettings):
     COMPANY_STATE: str = "Telangana (36)"
     COMPANY_PHONE: str = "+91 90300 11220"
     COMPANY_EMAIL: str = "works@sridharconstructions.example"
+    # Printed on invoices so the customer knows where to pay.
+    COMPANY_BANK_NAME: str = "HDFC Bank, Kukatpally Branch"
+    COMPANY_BANK_ACCOUNT: str = "50200041188213"
+    COMPANY_BANK_IFSC: str = "HDFC0001284"
     QUOTATION_VALIDITY_DAYS: int = 15
+    INVOICE_DUE_DAYS: int = 30
+    # Workmanship warranty printed on completion certificates. Company policy,
+    # not per-job data, so it lives here rather than on the certificates table.
+    WARRANTY_MONTHS: int = 12
 
 
 @lru_cache

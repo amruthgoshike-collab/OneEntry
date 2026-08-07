@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ certificate.certificate_number }}</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 11pt;
+    color: #1a1a1a;
+    line-height: 1.45;
+  }
+
+  /* Classic double rule, drawn as two nested frames. No height:100% — that
+     pushes the closing border onto a second page and leaves page one
+     looking unfinished. */
+  .frame { border: 2.5pt solid #6e2f34; padding: 4pt; }
+  .inner { border: .75pt solid #6e2f34; padding: 18pt 24pt; }
+
+  .letterhead { text-align: center; border-bottom: .75pt solid #d8c4c6;
+                padding-bottom: 10pt; }
+  .letterhead h1 { margin: 0 0 4pt; font-size: 20pt; letter-spacing: .4pt;
+                   color: #1a1a1a; }
+  .letterhead p { margin: 1.5pt 0; font-size: 8.5pt; color: #555;
+                  font-family: "Segoe UI", Arial, sans-serif; }
+
+  .title { text-align: center; margin: 16pt 0 4pt; }
+  .title h2 { margin: 0; font-size: 17pt; letter-spacing: 4pt;
+              color: #6e2f34; text-transform: uppercase; }
+  .title .rule { width: 90pt; height: 1.5pt; background: #6e2f34;
+                 margin: 9pt auto 0; }
+
+  .refs { display: flex; justify-content: space-between; margin: 13pt 0 0;
+          font-size: 9.5pt; font-family: "Segoe UI", Arial, sans-serif; }
+  .refs .k { color: #666; }
+  .refs strong { color: #1a1a1a; }
+
+  .preamble { margin: 14pt 0 0; text-align: justify; }
+
+  table.details { width: 100%; border-collapse: collapse; margin: 12pt 0 0; }
+  table.details td { padding: 4pt 0; vertical-align: top; font-size: 10.5pt;
+                     border-bottom: .5pt dotted #cfc0c1; }
+  table.details td.k { width: 150pt; color: #666; font-size: 9.5pt;
+                       font-family: "Segoe UI", Arial, sans-serif;
+                       text-transform: uppercase; letter-spacing: .5pt;
+                       padding-top: 7pt; }
+  table.details td.v { font-weight: 700; }
+
+  h3.section { margin: 15pt 0 5pt; font-size: 9pt; letter-spacing: 1.5pt;
+               color: #6e2f34; text-transform: uppercase;
+               font-family: "Segoe UI", Arial, sans-serif; }
+  .scope { text-align: justify; margin: 0; }
+  .warranty { text-align: justify; margin: 0; font-size: 10pt; color: #333; }
+
+  .sign-row { display: flex; justify-content: flex-end; margin-top: 24pt; }
+  .sign { width: 220pt; text-align: center; }
+  .sign .for { font-size: 10.5pt; font-weight: 700; }
+  .sign .line { margin-top: 34pt; border-top: .75pt solid #555; padding-top: 5pt;
+                font-size: 9pt; color: #555;
+                font-family: "Segoe UI", Arial, sans-serif; }
+
+  .fineprint { margin-top: 14pt; padding-top: 6pt; border-top: .5pt solid #e2d5d6;
+               font-size: 7.5pt; color: #888; text-align: center;
+               font-family: "Segoe UI", Arial, sans-serif; }
+</style>
+</head>
+<body>
+<div class="frame">
+<div class="inner">
+
+  <div class="letterhead">
+    <h1>{{ company.name }}</h1>
+    <p>{{ company.address }}</p>
+    <p>GSTIN: {{ company.gstin }}{% if company.state %} &nbsp;|&nbsp; State: {{ company.state }}{% endif %}
+       &nbsp;|&nbsp; Ph: {{ company.phone }} &nbsp;|&nbsp; {{ company.email }}</p>
+  </div>
+
+  <div class="title">
+    <h2>Work Completion Certificate</h2>
+    <div class="rule"></div>
+  </div>
+
+  <div class="refs">
+    <div><span class="k">Certificate No:</span> <strong>{{ certificate.certificate_number }}</strong></div>
+    <div><span class="k">Date of Issue:</span> <strong>{{ issue_date }}</strong></div>
+  </div>
+
+  <p class="preamble">
+    This is to certify that the work described below, awarded to
+    {{ company.name }} by {{ customer.name }}, has been executed and completed
+    in full, and has been handed over to the customer.
+  </p>
+
+  <table class="details">
+    <tr>
+      <td class="k">Issued To</td>
+      <td class="v">
+        {{ customer.name }}
+        {% if customer.address %}<br><span style="font-weight:400">{{ customer.address }}</span>{% endif %}
+        {% if customer.gstin %}<br><span style="font-weight:400;font-size:9.5pt">GSTIN: {{ customer.gstin }}</span>{% endif %}
+      </td>
+    </tr>
+    <tr><td class="k">Work</td><td class="v">{{ job.title }}</td></tr>
+    {% if job.site_address %}
+    <tr><td class="k">Site</td><td class="v">{{ job.site_address }}</td></tr>
+    {% endif %}
+    <tr>
+      <td class="k">Job Reference</td>
+      <td class="v">{{ job.job_number }}{% if invoice %} &nbsp;|&nbsp; Invoice {{ invoice.invoice_number }}{% endif %}</td>
+    </tr>
+    <tr><td class="k">Date of Completion</td><td class="v">{{ completion_date }}</td></tr>
+  </table>
+
+  <h3 class="section">Scope of Work Executed</h3>
+  <p class="scope">{{ scope_summary }}</p>
+
+  <h3 class="section">Warranty</h3>
+  <p class="warranty">
+    The workmanship executed under this certificate carries a warranty of
+    {{ warranty_months }} months from the date of completion stated above
+    against defects attributable to workmanship. Defects arising from misuse,
+    structural movement, water ingress originating outside the executed scope,
+    or normal wear and tear are excluded from this warranty.
+  </p>
+
+  <div class="sign-row">
+    <div class="sign">
+      <div class="for">For {{ company.name }}</div>
+      <div class="line">Authorised Signatory</div>
+    </div>
+  </div>
+
+  <div class="fineprint">
+    This is a computer-generated certificate issued against
+    {{ job.job_number }} and does not require a physical signature.
+    &nbsp;|&nbsp; {{ certificate.certificate_number }}
+  </div>
+
+</div>
+</div>
+</body>
+</html>

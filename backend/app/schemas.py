@@ -126,6 +126,13 @@ class Invoice(BaseModel):
         return f"/api/invoices/{self.id}/pdf" if self.pdf_path else None
 
 
+class ApproveResponse(BaseModel):
+    """POST /quotations/{id}/approve — both sides of the hand-off."""
+
+    quotation: Quotation
+    invoice: Invoice
+
+
 class Certificate(BaseModel):
     model_config = ORM
 
@@ -230,3 +237,20 @@ class JobDetail(JobBase):
 
 class JobList(BaseModel):
     items: list[JobSummary]
+
+
+# --- search ------------------------------------------------------------------
+
+class SearchRequest(BaseModel):
+    q: str = Field(min_length=1, max_length=500)
+
+
+class SearchResponse(BaseModel):
+    mode: Literal["structured", "semantic"]
+    answer: str
+    # Present only on the structured path. Show it behind a toggle.
+    sql: str | None = None
+    # Free-form: a record listing echoes the v_search columns, but an
+    # aggregation ("how many jobs are completed") returns whatever the SQL
+    # selected. Render the keys as table headers.
+    results: list[dict] = []

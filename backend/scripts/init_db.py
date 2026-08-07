@@ -13,18 +13,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import inspect, text
 
 from app.db import Base, engine
-from app.models import SEARCH_VIEW_SQL  # importing registers all models on Base
+from app.models import search_view_statements  # importing registers models on Base
 
 
 def main() -> None:
     print(f"Connecting to {engine.url.render_as_string(hide_password=True)}")
     Base.metadata.create_all(engine)
 
-    if engine.dialect.name == "postgresql":
-        with engine.begin() as conn:
-            conn.execute(text(SEARCH_VIEW_SQL))
-    else:
-        print(f"\nSkipping v_search — {engine.dialect.name} is not postgresql.")
+    with engine.begin() as conn:
+        for statement in search_view_statements(engine.dialect.name):
+            conn.execute(text(statement))
+    print(f"Created v_search for {engine.dialect.name}.")
 
     inspector = inspect(engine)
     print("\nTables:")

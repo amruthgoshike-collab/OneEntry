@@ -9,6 +9,7 @@ from app import models, schemas
 from app.db import get_db
 from app.events import log_event
 from app.numbering import next_number
+from app.search.chroma import index_job
 
 router = APIRouter(tags=["jobs"])
 
@@ -58,7 +59,9 @@ def create_job(payload: schemas.JobCreate, db: Session = Depends(get_db)):
     log_event(db, job.id, "job_created", f"{job.job_number} created for {customer.name}")
     db.commit()
 
-    return _load_detail(db, job.id)
+    detail = _load_detail(db, job.id)
+    index_job(detail)  # best-effort; never fails the request
+    return detail
 
 
 @router.get("/jobs", response_model=schemas.JobList)
@@ -125,4 +128,6 @@ def update_job(
         )
 
     db.commit()
-    return _load_detail(db, job.id)
+    detail = _load_detail(db, job.id)
+    index_job(detail)
+    return detail

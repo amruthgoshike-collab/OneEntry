@@ -9,8 +9,9 @@ strings. **Every numeric DB column serializes as a string decimal**
 Dates are `YYYY-MM-DD`, timestamps ISO 8601. Absent values are `null` — fields
 are never omitted.
 
-Implemented so far: **entities, jobs, documents, quotation generation**.
-Approve-to-invoice, certificates and search are still to be built.
+Implemented so far: **entities, jobs, documents, quotation generation,
+approve-to-invoice, completion certificates** — the whole loop. Search is still
+to be built.
 
 `pdf_url` is an API path, not a filesystem path — `GET` it to receive
 `application/pdf`. It is `null` until the PDF has been rendered.
@@ -113,6 +114,10 @@ Every job state change appends to `events`, the timeline on the detail screen:
 | `job_created` | `POST /jobs` |
 | `status_changed` | the job's `status` actually changes. `detail` reads `"enquiry -> completed"` |
 | `quotation_generated` | `POST /jobs/{id}/quotation` |
+| `quotation_approved` | `POST /quotations/{id}/approve` |
+| `invoice_created` | `POST /quotations/{id}/approve` |
+| `certificate_issued` | `POST /jobs/{id}/certificate` |
+| `invoice_paid` | an invoice is settled. No endpoint raises this yet — only `scripts/seed.py` writes it, so demo timelines look complete |
 
 ---
 
@@ -143,13 +148,50 @@ What `pdf_url` points at. `404` if the quotation doesn't exist or has no
 rendered PDF.
 
 `POST /quotations/{id}/approve` → `200`
-Sets quotation `approved`, job `approved`, **and creates the invoice by copying
-line items.** Returns `{ "quotation": Quotation, "invoice": Invoice }`.
-No LLM call here. It must be instant — that contrast is the demo.
+No body. Sets quotation `approved`, job `approved`, **and creates the invoice
+by copying line items.** Returns `{ "quotation": Quotation, "invoice": Invoice }`.
+
+The invoice copies the quotation's `subtotal`, `gst_rate`, `gst_amount` and
+`total` verbatim, and each line item's `description`, `hsn_sac`, `quantity`,
+`unit`, `rate`, `tax_rate`, `amount` and `position` into **new rows** carrying
+`invoice_id` (the quotation keeps its own). `due_date` is 30 days out
+(`INVOICE_DUE_DAYS`), `status` is `unpaid`, and the invoice PDF is rendered
+before the response returns, so `pdf_url` is populated immediately.
+
+**No LLM call here** — it copies rows that already exist. Measured at
+**~370 ms** end to end including the PDF, against ~13 s to generate the
+quotation. That contrast is the demo, so keep it that way.
+
+Writes `quotation_approved` and `invoice_created` events, plus `status_changed`
+if the job wasn't already `approved`.
+
+`404` if the quotation doesn't exist. `409` if it is already approved —
+approving twice would mint a second invoice for the same work.
+
+`GET /invoices/{id}/pdf` → `200 application/pdf`
+What the invoice's `pdf_url` points at. `404` if the invoice doesn't exist or
+has no rendered PDF.
 
 `POST /jobs/{id}/certificate` → `201`
-Requires job status `completed`. Gemini writes `scope_summary` from the job and
-its line items. Returns `Certificate` with `pdf_url`.
+No body. **Requires job status `completed`** — `409` otherwise, with a message
+naming the current status. Gemini writes `scope_summary` from the job title,
+description and the billed line items (invoice line items, falling back to
+quotation line items): 3-4 sentences, one paragraph, past tense, no bullets and
+no marketing language. Bullets and line breaks are stripped server-side rather
+than trusted. Returns `Certificate` with `pdf_url`; takes 5-15s.
+
+Writes a `certificate_issued` event. `404` if the job doesn't exist, `502` if
+Gemini fails or returns an empty summary.
+
+Reissuing is allowed — a job may hold several certificates (`CERT-0002`, …),
+and `GET /jobs/{id}` returns them all in `certificates[]`.
+
+The warranty period printed on the certificate comes from the `WARRANTY_MONTHS`
+setting, not from the database — it is company policy rather than per-job data.
+
+`GET /certificates/{id}/pdf` → `200 application/pdf`
+What the certificate's `pdf_url` points at. `404` if the certificate doesn't
+exist or has no rendered PDF.
 
 ---
 
@@ -222,7 +264,28 @@ for fuzzy recall, so it is a real column rather than just a key in
 ```
 `mode` is `structured` or `semantic`. Frontend renders both the same way —
 `answer` on top, `results` as a table. Show `sql` behind a toggle; judges like
-seeing it.
+seeing it. `sql` is `null` on the semantic path.
+
+**Routing.** Any filterable signal in the question — a digit, a comparison
+(`above`, `more than`), an aggregation (`how many`, `most`), a status word
+(`unpaid`, `completed`) or a date (`last month`, `March`) — goes structured.
+Only a question with no filterable content at all falls through to semantic,
+so "when in doubt" always lands on structured.
+
+**`results` is free-form.** A record listing echoes the `v_search` columns
+above, but an aggregation returns whatever the SQL selected — `how many jobs
+are completed` yields `[{"completed_jobs_count": 3}]`. Render the keys of the
+first row as table headers rather than assuming a fixed shape. Semantic results
+add `id`, `job_id` and `job_title`.
+
+**Safety.** The generated SQL is validated before execution: a single plain
+SELECT (no `WITH`), no comments, no semicolons, no DDL/DML keywords,
+`v_search` as the only readable relation, and `LIMIT 50` forced on. Anything
+else is rejected unexecuted. If the SQL is rejected, fails to run, or Gemini is
+unavailable, the request falls back to the semantic path rather than erroring —
+so `mode` may be `semantic` for a question that looks structured.
+
+`502` only if both paths fail.
 
 ---
 

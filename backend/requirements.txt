@@ -10,3 +10,6 @@ jinja2
 # ship on Windows — Chromium's print-to-PDF needs no system libraries.
 # After installing, run once: python -m playwright install chromium
 playwright
+# Semantic recall. Chroma's default embedder is all-MiniLM-L6-v2 via ONNX,
+# so no torch — it downloads ~80MB of model on first use.
+chromadb

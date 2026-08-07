@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ invoice.invoice_number }}</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    color: #1a1a1a;
+    line-height: 1.32;
+  }
+
+  /* ---- header ---- */
+  header { display: flex; justify-content: space-between; align-items: flex-start;
+           border-bottom: 2.5pt solid #1a1a1a; padding-bottom: 7pt; }
+  .company h1 { margin: 0 0 3pt; font-size: 19pt; letter-spacing: .3pt; }
+  .company p { margin: 1pt 0; font-size: 9pt; color: #444; }
+  .stamp { text-align: right; min-width: 210pt; }
+  .stamp h2 { margin: 0 0 6pt; font-size: 15pt; letter-spacing: 2.5pt; color: #146b45; }
+  .stamp table { border-collapse: collapse; margin-left: auto; font-size: 9pt; }
+  .stamp td { padding: 1.5pt 0 1.5pt 10pt; text-align: right; }
+  .stamp td.k { color: #555; text-align: left; padding-left: 0; }
+  .stamp td.due { color: #a3341c; font-weight: 700; }
+
+  /* ---- parties ---- */
+  .parties { display: flex; gap: 14pt; margin: 9pt 0; }
+  .parties > div { flex: 1; border: .75pt solid #c8c8c8; padding: 6pt 9pt; }
+  .parties h3 { margin: 0 0 5pt; font-size: 8pt; text-transform: uppercase;
+                letter-spacing: 1pt; color: #146b45; }
+  .parties .name { font-weight: 700; font-size: 11pt; }
+  .parties p { margin: 2pt 0; font-size: 9pt; color: #333; }
+
+  /* ---- items ---- */
+  table.items { width: 100%; border-collapse: collapse; margin-top: 4pt; }
+  table.items th { background: #146b45; color: #fff; font-size: 8.5pt;
+                   text-transform: uppercase; letter-spacing: .5pt;
+                   padding: 5pt; text-align: left; }
+  table.items td { padding: 4.5pt 5pt; border-bottom: .75pt solid #ddd;
+                   vertical-align: top; font-size: 9.5pt; }
+  table.items tr:nth-child(even) td { background: #fafbfc; }
+  .num { text-align: right; white-space: nowrap; }
+  .ctr { text-align: center; white-space: nowrap; }
+
+  /* ---- totals ---- */
+  .totals-wrap { display: flex; gap: 14pt; margin-top: 9pt; }
+  .words { flex: 1; border: .75pt solid #c8c8c8; padding: 6pt 9pt; }
+  .words h3 { margin: 0 0 4pt; font-size: 8pt; text-transform: uppercase;
+              letter-spacing: 1pt; color: #146b45; }
+  .words p { margin: 0; font-size: 9.5pt; font-weight: 600; }
+  .words .bank { margin-top: 7pt; padding-top: 6pt; border-top: .75pt solid #e0e0e0; }
+  .words .bank p { font-weight: 400; font-size: 8.5pt; color: #444; margin: 1.5pt 0; }
+  table.totals { border-collapse: collapse; min-width: 230pt; }
+  table.totals td { padding: 4pt 8pt; font-size: 9.5pt; }
+  table.totals td.k { color: #444; }
+  table.totals tr.grand td { background: #146b45; color: #fff; font-weight: 700;
+                             font-size: 11pt; padding: 7pt 8pt; }
+  table.totals tr.rule td { border-top: .75pt solid #bbb; }
+
+  /* ---- tax summary ---- */
+  h4.section { margin: 10pt 0 3pt; font-size: 8pt; text-transform: uppercase;
+               letter-spacing: 1pt; color: #146b45; }
+  table.tax { width: 100%; border-collapse: collapse; }
+  table.tax th, table.tax td { border: .75pt solid #ccc; padding: 3pt 5pt; font-size: 8.5pt; }
+  table.tax th { background: #eef4f0; text-align: center; }
+  table.tax tfoot td { font-weight: 700; background: #fafbfc; }
+
+  /* ---- terms + signature ---- */
+  .footer { display: flex; gap: 14pt; margin-top: 10pt; }
+  .terms { flex: 1; }
+  .terms h4 { margin: 0 0 5pt; font-size: 8pt; text-transform: uppercase;
+              letter-spacing: 1pt; color: #146b45; }
+  .terms ul { margin: 0; padding-left: 14pt; font-size: 9pt; color: #333; }
+  .terms li { margin-bottom: 1.5pt; }
+  .terms .declaration { margin-top: 8pt; font-size: 8pt; color: #666; }
+  .sign { width: 190pt; border: .75pt solid #c8c8c8; padding: 8pt 10pt;
+          text-align: center; display: flex; flex-direction: column;
+          justify-content: space-between; }
+  .sign .for { font-size: 9pt; font-weight: 600; }
+  .sign .line { margin-top: 26pt; border-top: .75pt solid #888; padding-top: 4pt;
+                font-size: 8.5pt; color: #555; }
+  .fineprint { margin-top: 8pt; padding-top: 5pt; border-top: .75pt solid #ddd;
+               font-size: 8pt; color: #777; text-align: center; }
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="company">
+      <h1>{{ company.name }}</h1>
+      <p>{{ company.address }}</p>
+      <p>GSTIN: <strong>{{ company.gstin }}</strong>{% if company.state %} &nbsp;|&nbsp; State: {{ company.state }}{% endif %}</p>
+      <p>Ph: {{ company.phone }} &nbsp;|&nbsp; {{ company.email }}</p>
+    </div>
+    <div class="stamp">
+      <h2>TAX INVOICE</h2>
+      <table>
+        <tr><td class="k">Invoice No</td><td><strong>{{ invoice.invoice_number }}</strong></td></tr>
+        <tr><td class="k">Invoice Date</td><td>{{ invoice_date }}</td></tr>
+        <tr><td class="k">Due Date</td><td class="due">{{ due_date }}</td></tr>
+        <tr><td class="k">Quotation Ref</td><td>{{ quotation.quotation_number }}</td></tr>
+        <tr><td class="k">Job Ref</td><td>{{ job.job_number }}</td></tr>
+      </table>
+    </div>
+  </header>
+
+  <div class="parties">
+    <div>
+      <h3>Bill To</h3>
+      <div class="name">{{ customer.name }}</div>
+      {% if customer.address %}<p>{{ customer.address }}</p>{% endif %}
+      {% if customer.gstin %}<p>GSTIN: {{ customer.gstin }}</p>{% endif %}
+      {% if customer.phone %}<p>Ph: {{ customer.phone }}</p>{% endif %}
+    </div>
+    <div>
+      <h3>Work Details</h3>
+      <div class="name">{{ job.title }}</div>
+      {% if job.site_address %}<p>Site: {{ job.site_address }}</p>{% endif %}
+      <p>Job No: {{ job.job_number }}</p>
+    </div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:22pt">#</th>
+        <th>Description</th>
+        <th style="width:52pt" class="ctr">HSN/SAC</th>
+        <th style="width:48pt" class="num">Qty</th>
+        <th style="width:40pt" class="ctr">Unit</th>
+        <th style="width:62pt" class="num">Rate</th>
+        <th style="width:72pt" class="num">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in lines %}
+      <tr>
+        <td class="ctr">{{ loop.index }}</td>
+        <td>{{ line.description }}</td>
+        <td class="ctr">{{ line.hsn_sac or '-' }}</td>
+        <td class="num">{{ line.quantity | inr }}</td>
+        <td class="ctr">{{ line.unit or '-' }}</td>
+        <td class="num">{{ line.rate | inr }}</td>
+        <td class="num">{{ line.amount | inr }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="totals-wrap">
+    <div class="words">
+      <h3>Amount Chargeable (in words)</h3>
+      <p>{{ amount_in_words }}</p>
+      <div class="bank">
+        <h3>Bank Details</h3>
+        <p>{{ company.bank_name }}</p>
+        <p>A/c: {{ company.bank_account }} &nbsp;|&nbsp; IFSC: {{ company.bank_ifsc }}</p>
+      </div>
+    </div>
+    <table class="totals">
+      <tr><td class="k">Taxable Value</td><td class="num">{{ totals.subtotal | inr }}</td></tr>
+      {% for group in totals.tax_groups %}
+      <tr><td class="k">CGST @ {{ group.cgst_rate | inr }}%</td><td class="num">{{ group.cgst | inr }}</td></tr>
+      <tr><td class="k">SGST @ {{ group.sgst_rate | inr }}%</td><td class="num">{{ group.sgst | inr }}</td></tr>
+      {% endfor %}
+      <tr class="rule"><td class="k">Total GST</td><td class="num">{{ totals.gst_amount | inr }}</td></tr>
+      <tr class="grand"><td>AMOUNT PAYABLE</td><td class="num">&#8377; {{ totals.total | inr }}</td></tr>
+    </table>
+  </div>
+
+  <h4 class="section">Tax Summary (HSN/SAC-wise)</h4>
+  <table class="tax">
+    <thead>
+      <tr>
+        <th rowspan="2">HSN/SAC</th>
+        <th rowspan="2">Taxable Value</th>
+        <th colspan="2">CGST</th>
+        <th colspan="2">SGST</th>
+        <th rowspan="2">Total Tax</th>
+      </tr>
+      <tr><th>Rate</th><th>Amount</th><th>Rate</th><th>Amount</th></tr>
+    </thead>
+    <tbody>
+      {% for row in hsn_rows %}
+      <tr>
+        <td class="ctr">{{ row.hsn_sac }}</td>
+        <td class="num">{{ row.taxable | inr }}</td>
+        <td class="ctr">{{ row.cgst_rate | inr }}%</td>
+        <td class="num">{{ row.cgst | inr }}</td>
+        <td class="ctr">{{ row.sgst_rate | inr }}%</td>
+        <td class="num">{{ row.sgst | inr }}</td>
+        <td class="num">{{ row.tax | inr }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td class="ctr">Total</td>
+        <td class="num">{{ totals.subtotal | inr }}</td>
+        <td></td><td class="num">{{ totals.cgst_total | inr }}</td>
+        <td></td><td class="num">{{ totals.sgst_total | inr }}</td>
+        <td class="num">{{ totals.gst_amount | inr }}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="footer">
+    <div class="terms">
+      <h4>Payment Terms</h4>
+      <ul>
+        <li>Payment due by <strong>{{ due_date }}</strong>.</li>
+        <li>Please quote invoice number <strong>{{ invoice.invoice_number }}</strong> with your payment.</li>
+        <li>Raised against approved quotation {{ quotation.quotation_number }}.</li>
+      </ul>
+      <p class="declaration">
+        Declaration: We declare that this invoice shows the actual price of the
+        goods and services described and that all particulars are true and correct.
+      </p>
+    </div>
+    <div class="sign">
+      <div class="for">For {{ company.name }}</div>
+      <div class="line">Authorised Signatory</div>
+    </div>
+  </div>
+
+  <div class="fineprint">
+    This is a computer-generated invoice and does not require a physical signature.
+    &nbsp;|&nbsp; {{ company.name }} &nbsp;|&nbsp; {{ invoice.invoice_number }}
+  </div>
+
+</body>
+</html>

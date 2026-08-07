@@ -22,6 +22,121 @@ EXPENSE_CATEGORIES = (
     "other",
 )
 
+TEXT_TO_SQL_PROMPT = """You translate a contractor's plain-English question into ONE
+read-only SQL SELECT statement.
+
+You may query exactly one relation, the read-only view `v_search`. It has one row
+per searchable record:
+
+  record_type  text     'job' | 'quotation' | 'invoice' | 'certificate' | 'document'
+  id           uuid     primary key of the underlying row
+  number       text     JOB-0001 / QTN-0001 / INV-0001 / CERT-0001, or a filename
+                        for documents
+  party_name   text     the customer for jobs, quotations, invoices and
+                        certificates; the vendor for documents
+  amount       numeric  the total. NULL for jobs and certificates
+  status       text     job: enquiry|quoted|approved|in_progress|completed
+                        quotation: draft|approved
+                        invoice: unpaid|paid
+                        certificate: always 'issued'
+                        document: uploaded|extracted|failed
+  record_date  date     the date the record belongs to
+  job_id       uuid     the job this record hangs off
+  job_title    text     the job's title
+
+Today is {today}.
+
+Question: {question}
+
+Return a JSON object with exactly one key:
+
+{{ "sql": "SELECT ..." }}
+
+Rules:
+- A single plain SELECT. Never INSERT, UPDATE, DELETE or any DDL, no WITH
+  clause, no semicolon, no SQL comments.
+- `v_search` is the only relation you may name. Never reference the underlying
+  tables.
+- **Never use date functions** — no NOW(), CURRENT_DATE, date_trunc, strftime,
+  INTERVAL. Work out the date bounds yourself from today's date above and write
+  them as literal 'YYYY-MM-DD' strings. "last month" becomes
+  record_date >= '2026-06-01' AND record_date < '2026-07-01' style bounds.
+- **Portable SQL only** — this runs on both Postgres and SQLite. Never use
+  ILIKE; for case-insensitive matching write
+  LOWER(column) LIKE LOWER('%text%'). Avoid any other dialect-specific
+  function.
+- Match text loosely. A question about "electricity bills" should look at
+  party_name, number and job_title with LOWER(...) LIKE, not just one column.
+- Filter record_type whenever the question names a kind of record. "invoices"
+  means record_type = 'invoice'.
+- For counts and totals, return the aggregate — you do not have to return the
+  standard columns. Give aggregate columns a readable alias.
+- Otherwise select record_type, number, party_name, amount, status, record_date
+  so the results render as a table.
+- Order sensibly: newest first for listings, largest first for rankings.
+- Return the JSON object only. No commentary, no markdown fences.
+"""
+
+
+SEARCH_ANSWER_PROMPT = """Answer the user's question in ONE short sentence, using only
+the rows given.
+
+Question: {question}
+
+Rows returned ({row_count} total, showing up to 20):
+{rows}
+
+Return a JSON object with exactly one key:
+
+{{ "answer": "..." }}
+
+Rules:
+- One sentence. State the finding directly; no preamble like "Based on the data".
+- Use Indian digit grouping for money and prefix with the rupee sign, e.g.
+  Rs.1,84,500 becomes "₹1,84,500".
+- If there are no rows, say plainly that nothing matched — do not invent records.
+- Do not list every row; summarise. Naming one or two is fine when there are few.
+- Return the JSON object only. No commentary, no markdown fences.
+"""
+
+
+CERTIFICATE_PROMPT = """You are drafting the scope paragraph for a work completion
+certificate that an Indian construction contractor issues to a customer once a job
+is finished.
+
+Job number:   {job_number}
+Title:        {title}
+Description:  {description}
+Site:         {site_address}
+Customer:     {customer_name}
+Completed on: {completed_on}
+Work carried out and billed:
+{line_items}
+
+Return a JSON object with exactly one key:
+
+{{ "scope_summary": "the paragraph" }}
+
+Write either 3 or 4 complete sentences — never five — as a SINGLE paragraph, in
+the past tense, in the formal register an Indian contractor actually uses on a
+completion certificate. Keep the whole paragraph between 60 and 100 words; it
+has to fit one block on a printed certificate.
+
+Rules:
+- State what was done, using the real quantities, areas and materials from the
+  billed work above. Be specific and factual.
+- Plain professional English. No marketing language of any kind — never
+  "premium", "world-class", "state-of-the-art", "high-quality", "hassle-free",
+  "customer satisfaction", "we are proud", "we take pleasure".
+- One paragraph. No bullet points, no numbered lists, no line breaks, no
+  headings, no salutation, no sign-off.
+- Do not invent work that is not in the description or the billed items.
+- Do not write the certificate number, dates or signature lines — the template
+  prints those separately.
+- Return the JSON object only. No commentary, no markdown fences.
+"""
+
+
 QUOTATION_PROMPT = """You are preparing a priced quotation for an Indian construction
 contractor. Turn the job below into billable line items a customer would accept.
 

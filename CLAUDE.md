@@ -24,7 +24,11 @@ If a feature does not serve this loop, it does not get built.
 - Backend: FastAPI + SQLAlchemy + Supabase Postgres.
 - Frontend: React + Vite + Tailwind.
 - LLM: Gemini, called ONLY through `backend/app/llm/client.py`.
-- Vector search: ChromaDB, local persistent client.
+- Vector search: ChromaDB, local persistent client at `CHROMA_PATH` (resolved
+  against the repo root when relative). Embeddings are all-MiniLM-L6-v2 via
+  Chroma's default ONNX embedder — deliberately not sentence-transformers, so
+  torch never enters the dependency tree. Run `python -m scripts.reindex` to
+  rebuild the collection from Postgres.
 - PDFs: Jinja2 HTML templates in `backend/app/templates/`, printed to PDF by
   Playwright's Chromium. WeasyPrint was the original choice but needs the
   GTK/Pango native stack, which does not ship on Windows — it fails at import
@@ -73,16 +77,34 @@ backend/
     extraction.py      document bytes -> normalized Document fields
     money.py           Decimal maths, GST split, amount-in-words. ALL money
                        arithmetic lives here — never in the LLM
+    artifacts.py       company header context + generated-PDF paths
+    services.py        build_quotation / build_invoice / build_certificate.
+                       Every DB write for a document goes through here so the
+                       routers and scripts/seed.py produce identical lineage.
+                       Routers own HTTP + the Gemini call; services own the
+                       numbering, rows, totals, PDF and events
     routers/           entities.py, jobs.py, documents.py, quotations.py,
                        invoices.py, certificates.py, search.py
     llm/client.py      ALL Gemini calls go here
     llm/prompts.py     prompt templates
-    pdf/render.py      HTML -> PDF (Jinja2 -> Chromium)
+    pdf/render.py      HTML -> PDF (Jinja2 -> Chromium). Chromium is launched
+                       once at boot and kept warm on a dedicated thread —
+                       relaunching per call costs 0.6-2.6s and would break
+                       the instant approve-to-invoice step
     templates/         quotation.html, invoice.html, certificate.html
-    search/router.py   structured vs semantic routing
+    search/router.py   structured vs semantic routing, semantic hydration
+    search/sql.py      text-to-SQL + the guard. Validate before executing:
+                       SELECT only, one statement, v_search alone, LIMIT 50
+    search/chroma.py   Chroma collection "oneentry" over jobs + extracted
+                       documents. Derived from Postgres, never the source of
+                       truth — indexing failures log and continue
   scripts/
     init_db.py         create tables + v_search view, re-runnable
     migrate_*.py       one column-adding migration each, all re-runnable
+    reindex.py         drop + rebuild the Chroma collection from Postgres
+    seed.py            DESTRUCTIVE demo dataset — wipes every table, then
+                       rebuilds 6 customers and 12 jobs over 6 months through
+                       app/services.py. Fixture line items, no Gemini calls
   tests/
     test_extract.py    runs extraction over samples/ and prints JSON
 frontend/

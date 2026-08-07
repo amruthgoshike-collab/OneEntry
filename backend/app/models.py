@@ -220,6 +220,23 @@ class JobEvent(Base):
 
 # Read-only view for text-to-SQL search. One row per searchable record with a
 # uniform shape; the search router only ever SELECTs from this.
+#
+# Two dialects because the demo runs on SQLite when no Postgres is available:
+# Postgres casts with `::date`, SQLite stores timestamps as ISO text and needs
+# substr(). The column list is identical either way — use
+# search_view_statements() rather than picking one by hand.
+SEARCH_VIEW_COLUMNS = (
+    "record_type",
+    "id",
+    "number",
+    "party_name",
+    "amount",
+    "status",
+    "record_date",
+    "job_id",
+    "job_title",
+)
+
 SEARCH_VIEW_SQL = """
 CREATE OR REPLACE VIEW v_search AS
 SELECT 'job'::text          AS record_type,
@@ -262,3 +279,54 @@ SELECT 'document', d.id, d.filename, d.vendor_name, d.total_amount, d.status,
 FROM documents d
 LEFT JOIN jobs j ON j.id = d.job_id;
 """
+
+SEARCH_VIEW_SQL_SQLITE = """
+CREATE VIEW v_search AS
+SELECT 'job'                         AS record_type,
+       j.id                          AS id,
+       j.job_number                  AS number,
+       e.name                        AS party_name,
+       NULL                          AS amount,
+       j.status                      AS status,
+       substr(j.created_at, 1, 10)   AS record_date,
+       j.id                          AS job_id,
+       j.title                       AS job_title
+FROM jobs j
+JOIN entities e ON e.id = j.customer_id
+
+UNION ALL
+SELECT 'quotation', q.id, q.quotation_number, e.name, q.total, q.status,
+       substr(q.created_at, 1, 10), q.job_id, j.title
+FROM quotations q
+JOIN jobs j ON j.id = q.job_id
+JOIN entities e ON e.id = j.customer_id
+
+UNION ALL
+SELECT 'invoice', i.id, i.invoice_number, e.name, i.total, i.status,
+       substr(i.created_at, 1, 10), i.job_id, j.title
+FROM invoices i
+JOIN jobs j ON j.id = i.job_id
+JOIN entities e ON e.id = j.customer_id
+
+UNION ALL
+SELECT 'certificate', c.id, c.certificate_number, e.name, NULL,
+       'issued', COALESCE(c.issued_on, substr(c.created_at, 1, 10)), c.job_id, j.title
+FROM certificates c
+JOIN jobs j ON j.id = c.job_id
+JOIN entities e ON e.id = j.customer_id
+
+UNION ALL
+SELECT 'document', d.id, d.filename, d.vendor_name, d.total_amount, d.status,
+       COALESCE(d.document_date, substr(d.created_at, 1, 10)), d.job_id,
+       COALESCE(j.title, '')
+FROM documents d
+LEFT JOIN jobs j ON j.id = d.job_id;
+"""
+
+
+def search_view_statements(dialect: str) -> list[str]:
+    """DDL to (re)create v_search for the connected dialect."""
+    if dialect == "postgresql":
+        return [SEARCH_VIEW_SQL]
+    # SQLite has no CREATE OR REPLACE VIEW.
+    return ["DROP VIEW IF EXISTS v_search", SEARCH_VIEW_SQL_SQLITE]

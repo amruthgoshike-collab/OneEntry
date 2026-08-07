@@ -11,7 +11,7 @@ raises `GeminiError` with the raw response logged at ERROR.
 import json
 import logging
 import re
-from functools import lru_cache
+import threading
 
 from google import genai
 from google.genai import types
@@ -42,12 +42,29 @@ class GeminiError(RuntimeError):
     """A Gemini call failed, or returned output we could not use."""
 
 
-@lru_cache(maxsize=1)
+_local = threading.local()
+
+
 def _client() -> genai.Client:
-    api_key = get_settings().GEMINI_API_KEY
-    if not api_key:
-        raise GeminiError("GEMINI_API_KEY is not set — add it to .env")
-    return genai.Client(api_key=api_key)
+    """One client per thread.
+
+    A single process-wide client gets shared by concurrent background
+    extraction tasks; when its HTTP pool closes, every later call in the
+    process dies with "Cannot send a request, as the client has been closed".
+    Per-thread clients keep connection reuse without the sharing.
+    """
+    client = getattr(_local, "client", None)
+    if client is None:
+        api_key = get_settings().GEMINI_API_KEY
+        if not api_key:
+            raise GeminiError("GEMINI_API_KEY is not set — add it to .env")
+        client = genai.Client(api_key=api_key)
+        _local.client = client
+    return client
+
+
+def _discard_client() -> None:
+    _local.client = None
 
 
 def strip_fences(text: str) -> str:
@@ -74,16 +91,25 @@ def _generate_raw(
     parts.append(types.Part.from_text(text=prompt))
 
     model_name = model or get_settings().GEMINI_MODEL
-    try:
-        response = _client().models.generate_content(
-            model=model_name,
-            contents=[types.Content(role="user", parts=parts)],
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
-    except GeminiError:
-        raise
-    except Exception as exc:  # SDK/transport/quota errors
-        raise GeminiError(f"Gemini call to {model_name} failed: {exc}") from exc
+    response = None
+    for attempt in (1, 2):
+        try:
+            response = _client().models.generate_content(
+                model=model_name,
+                contents=[types.Content(role="user", parts=parts)],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                ),
+            )
+            break
+        except GeminiError:
+            raise
+        except Exception as exc:  # SDK/transport/quota errors
+            if attempt == 1 and "client has been closed" in str(exc).lower():
+                logger.warning("Gemini HTTP client was closed; rebuilding it")
+                _discard_client()
+                continue
+            raise GeminiError(f"Gemini call to {model_name} failed: {exc}") from exc
 
     text = (response.text or "").strip()
     if not text:

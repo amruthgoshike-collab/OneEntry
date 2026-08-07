@@ -13,6 +13,7 @@ from app.config import STORAGE_ROOT
 from app.db import SessionLocal, get_db
 from app.extraction import extract_from_bytes, guess_mime_type
 from app.llm.client import SUPPORTED_MIME_TYPES
+from app.search.chroma import index_document
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["documents"])
@@ -64,6 +65,8 @@ def run_extraction(document_id: uuid.UUID) -> None:
             # Keep the reason where the frontend can surface it.
             document.extracted_json = {"error": f"{type(exc).__name__}: {exc}"}
         db.commit()
+        # Index after the row is durable; best-effort, never re-raises.
+        index_document(document)
 
 
 @router.post("/documents", status_code=202)
